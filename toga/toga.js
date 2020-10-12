@@ -6,37 +6,48 @@ const editorKeyUp = (e) => console.log('keyUp', e);
 const editorWheel = (e) => {
 
   const factor = e.deltaY < 0
-    ? state.sourceImage.zoom.factor + 1
-    : state.sourceImage.zoom.factor - 1;
+    ? state.sourceImage.zoom.factor + 1 // TODO zoom limit?
+    : Math.max(state.sourceImage.zoom.factor - 1, 0);
 
   // warning: This is ok if the construction of this type is sound
   //  tries to save on the cost of a state copy for the factor dependency
   const zoomOffset = getZoomOffset({ tileSize: state.sourceImage.zoom.tileSize, factor });
 
-  // wip: zoom to mouse
-  // get mouse location
-
   const bounds = state.canvas.getBoundingClientRect();
-  const mX = e.clientX - bounds.left; // warning: can be 0
-  const mY = e.clientY - bounds.top; // warnig: can be 0
+  const mouseX = e.clientX - bounds.left;
+  const mouseY = e.clientY - bounds.top;
+  const centerX = Math.floor(bounds.width / 2);
+  const centerY = Math.floor(bounds.height / 2);
 
-  // scale them to the image coord space for zoom?
-  // warning: I chose Math.round since
-  //  the division is producing values like 4.03 and 4.83
-  //  and I think mX/mY >= 0
-  const smX = mX * (Math.round(state.sourceImage.image.width / bounds.width));
-  const smY = mY * (Math.round(state.sourceImage.image.height / bounds.height));
-  // console.log({ mX, mY, smX, smY, cX: e.clientX, cY: e.clientY, bounds });
+  // bigger / smaller
+  // lefter / righter
+  // upper / downer
+  // the center of the image must be chained to the center of the canvas surface
+  // the direction of the chain must be driven by the quadrant location of the mouse
+  //  4 cases
+  //  +x, +y
+  //  +x, -y
+  //  -x, -y,
+  //  -x, +y
+  // the length of a chain link is zoomOffset
+  // console.log({ centerX, centerY, mouseX, mouseY, dx: centerX - mouseX, dy: centerY - mouseY });
+  //  all seem to remain the same
+  const dx = centerX - mouseX < 0
+    ? -zoomOffset
+    : zoomOffset;
 
-  // create image position dX/dY
-  // translate smX/smY of the image towards the center of the canvas by tileSize steps
-  const cX = Math.floor(bounds.width / 2) * (Math.round(state.sourceImage.image.width / bounds.width));
-  const cY = Math.floor(bounds.height / 2) * (Math.round(state.sourceImage.image.height / bounds.height));
-  console.log({ midX: Math.floor(bounds.width / 2), midY: Math.floor(bounds.height / 2), cX, cY, zoomOffset });
+  const dy = centerY - mouseY < 0
+    ? -zoomOffset
+    : zoomOffset;
 
-  const pX = state.sourceImage.render.x + cX - smX + zoomOffset;
-  const pY = state.sourceImage.render.y + cY - smY + zoomOffset;
-  console.log({ pX, pY });
+  const posX = dx < 0
+    ? dx
+    : 0;
+
+  const posY = dy < 0
+    ? dy
+    : 0;
+  // TODO graph these points help solve the problem
 
   // Idea: Complexity management; (for previous iteration of code)
   //  understanding that getZoomOffset deps on state.sourceImage.zoom.factor to have been updated in previous phase state
@@ -57,8 +68,12 @@ const editorWheel = (e) => {
             state.sourceImage.image.height,
             state.canvas.height),
           zoomOffset),
-        x: pX,
-        y: pY
+        x: posX,
+        y: posY,
+        debug: {
+          mouseX,
+          mouseY
+        }
       },
       zoom: {
         ...state.sourceImage.zoom,
@@ -131,8 +146,8 @@ const clearState = () => ({
     render: {
       w: null,
       h: null,
-      x: 0,
-      y: 0
+      x: null,
+      y: null
     },
     // Idea: My programs type system.
     //  Begin constraining the ways in which my program can fail.
@@ -140,7 +155,7 @@ const clearState = () => ({
     //    A type of <Zoom> where factor<Number:Integer>, tileSize<Number:Integer>
     zoom: {
       factor: 0,
-      tileSize: 200
+      tileSize: 25
     }
   }
 });
@@ -154,6 +169,18 @@ const render = () => {
   c.clearRect(0, 0, c.canvas.width, c.canvas.height);
 
   drawSourceImage(c);
+
+  if (state.sourceImage.render.debug) {
+    c.fillStyle = '#FF0000'; // RED
+    c.beginPath();
+    c.arc(
+      state.sourceImage.render.debug.mouseX,
+      state.sourceImage.render.debug.mouseY,
+      5,
+      0,
+      2 * Math.PI);
+    c.fill();
+  }
 };
 
 const drawSourceImage = (c) => {
